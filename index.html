@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сюрприз до Дня Валентина</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            background-color: #ffe4e6;
+            background-image: radial-gradient(#fecdd3 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        /* Initial States */
+        .rose-btn {
+            transition: filter 0.5s ease, transform 0.5s ease;
+        }
+
+        .gray-state {
+            filter: grayscale(100%) opacity(0.35);
+            transform: scale(0.9);
+        }
+
+        .color-state {
+            filter: grayscale(0%) opacity(1);
+            transform: scale(1.1);
+        }
+
+        /* Gift Initial State */
+        #gift-box {
+            filter: grayscale(100%) opacity(0.4);
+            transform: scale(0.9);
+            transition: filter 0.5s ease; 
+        }
+
+        /* Flight Animation Class */
+        .flying-rose {
+            transition: all 1s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        /* Animations */
+        @keyframes float-scale {
+            0% { transform: translateY(0px) scale(1.1); }
+            50% { transform: translateY(-10px) scale(1.1); }
+            100% { transform: translateY(0px) scale(1.1); }
+        }
+
+        @keyframes float-only {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+            100% { transform: translateY(0px); }
+        }
+        
+        @keyframes shutter {
+            0% { transform: translate(0, 0) rotate(0deg) scale(1.1); }
+            20% { transform: translate(-5px, 0) rotate(-5deg) scale(1.1); }
+            40% { transform: translate(5px, 0) rotate(5deg) scale(1.1); }
+            60% { transform: translate(-5px, 0) rotate(-5deg) scale(1.1); }
+            80% { transform: translate(5px, 0) rotate(5deg) scale(1.1); }
+            100% { transform: translate(0, 0) rotate(0deg) scale(1.1); }
+        }
+
+        /* Button Click Bounce */
+        @keyframes bounce-press {
+            0% { transform: scale(1); }
+            40% { transform: scale(0.9); }
+            80% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .floating-gift {
+            animation: float-scale 3s ease-in-out infinite;
+        }
+
+        .floating-wrapper {
+            animation: float-only 3.5s ease-in-out infinite;
+        }
+        
+        .shutter-animation {
+            animation: shutter 0.6s ease-in-out;
+        }
+        
+        .bounce-trigger {
+            animation: bounce-press 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* Confetti Canvas */
+        #confetti-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 overflow-hidden relative selection:bg-rose-200">
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- Game Overlay -->
+    <div id="game-overlay" class="fixed inset-0 z-[60] opacity-0 pointer-events-none transition-opacity duration-500" style="background: rgba(0,0,0,0.3)">
+        <iframe id="game-iframe" class="w-full h-full border-none" allow="camera"></iframe>
+    </div>
+
+    <!-- Game Container -->
+    <div class="relative w-full max-w-md aspect-square flex flex-col items-center justify-center z-10 mt-10">
+        
+        <!-- Top Rose (1st - I Key) -->
+        <div class="mb-4 floating-wrapper" style="animation-delay: 0s;">
+            <button id="rose-1" onclick="collectRose(this)" class="rose-btn gray-state p-2 hover:bg-white/30 rounded-full focus:outline-none">
+                <span class="text-6xl md:text-7xl select-none block">🌹</span>
+            </button>
+        </div>
+
+        <!-- Middle Row: Left Rose - Gift - Right Rose -->
+        <div class="flex items-center justify-center gap-8 md:gap-12 w-full">
+            <!-- Left Rose (2nd - O Key) -->
+            <div class="floating-wrapper" style="animation-delay: 1.5s;">
+                <button id="rose-2" onclick="collectRose(this)" class="rose-btn gray-state p-2 hover:bg-white/30 rounded-full focus:outline-none">
+                    <span class="text-6xl md:text-7xl select-none block">🌹</span>
+                </button>
+            </div>
+
+            <!-- Center Gift -->
+            <div id="gift-box" class="relative group flex justify-center items-center w-40 h-40">
+                <!-- Gift Emoji -->
+                <span id="gift-emoji" class="text-8xl md:text-9xl select-none drop-shadow-lg block transition-opacity duration-300">🎁</span>
+                
+                <!-- Hidden Real Image -->
+                <img id="gift-image" src="https://i.ibb.co/1GhwkSm8/roses.png" alt="Bouquet of Roses" 
+                     class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full object-contain z-20 transition-all duration-1000 ease-out scale-0 opacity-0 pointer-events-none">
+
+            </div>
+
+            <!-- Right Rose (3rd - P Key) -->
+            <div class="floating-wrapper" style="animation-delay: 0.75s;">
+                <button id="rose-3" onclick="collectRose(this)" class="rose-btn gray-state p-2 hover:bg-white/30 rounded-full focus:outline-none">
+                    <span class="text-6xl md:text-7xl select-none block">🌹</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Collect Button -->
+        <div class="mt-12 text-center h-20 relative z-40">
+            <button id="collect-btn" onclick="triggerOpenGift()" disabled 
+                class="px-10 py-3 rounded-full font-bold text-lg shadow-md border-b-4 transition-all duration-300 transform
+                
+                disabled:bg-gray-300 disabled:text-gray-500 disabled:border-gray-400 disabled:cursor-not-allowed
+                
+                enabled:bg-gradient-to-r enabled:from-rose-400 enabled:to-red-500 
+                enabled:text-white enabled:border-rose-700 enabled:cursor-pointer
+                enabled:shadow-lg enabled:hover:-translate-y-1 enabled:active:translate-y-1 enabled:active:border-b-0">
+                ЗІБРАТИ
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- State ---
+        const collectedRoses = new Set();
+        let isAnimating = false;
+        let currentGameRose = null;
+        const totalRoses = 3;
+        const gameMap = {
+            'rose-1': 'game-1.html',
+            'rose-2': 'game-2.html',
+            'rose-3': 'game-3.html'
+        };
+
+        // --- DOM Refs ---
+        const giftBox = document.getElementById('gift-box');
+        const collectBtn = document.getElementById('collect-btn');
+        const gameOverlay = document.getElementById('game-overlay');
+        const gameIframe = document.getElementById('game-iframe');
+
+        // --- Preload assets ---
+        ['https://i.ibb.co/1GhwkSm8/roses.png',
+         'https://www.freeiconspng.com/uploads/roses-png-hd-wedding-9.png'
+        ].forEach(src => { new Image().src = src; });
+
+        // --- Request camera early ---
+        (async function() {
+            try {
+                const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+                s.getTracks().forEach(t => t.stop());
+            } catch(e) {}
+        })();
+
+        // --- Keyboard: only F for gift button ---
+        document.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            if (key === 'f' || key === 'а') {
+                triggerOpenGift();
+            }
+        });
+
+        // --- Listen for game completion from iframe ---
+        window.addEventListener('message', (e) => {
+            if (e.data === 'gameComplete' && currentGameRose) {
+                onGameComplete(currentGameRose);
+            }
+        });
+
+        // --- Rose click: open game ---
+        function collectRose(btn) {
+            const roseId = btn.id;
+            if (isAnimating || collectedRoses.has(roseId)) return;
+
+            currentGameRose = roseId;
+            gameIframe.src = gameMap[roseId];
+            gameOverlay.classList.remove('pointer-events-none');
+            requestAnimationFrame(() => {
+                gameOverlay.style.opacity = '1';
+            });
+        }
+
+        // --- Game completed: close overlay, animate rose ---
+        function onGameComplete(roseId) {
+            currentGameRose = null;
+
+            // Fade out overlay
+            gameOverlay.style.opacity = '0';
+
+            setTimeout(() => {
+                gameOverlay.classList.add('pointer-events-none');
+                gameIframe.src = '';
+
+                // Wait 0.5s then animate rose
+                setTimeout(() => {
+                    startRoseAnimation(roseId);
+                }, 500);
+            }, 500); // Match transition duration
+        }
+
+        function startRoseAnimation(roseId) {
+            const btn = document.getElementById(roseId);
+            if (!btn || collectedRoses.has(roseId)) return;
+
+            isAnimating = true;
+            btn.classList.add('collected');
+            btn.classList.remove('gray-state');
+            btn.classList.add('color-state');
+
+            setTimeout(() => {
+                flyRoseToGift(btn, roseId);
+            }, 1000);
+        }
+
+        // --- Fly rose to gift ---
+        function flyRoseToGift(btn, roseId) {
+            const btnRect = btn.getBoundingClientRect();
+            const giftRect = giftBox.getBoundingClientRect();
+
+            const parent = btn.parentElement;
+            parent.style.width = parent.offsetWidth + 'px';
+            parent.style.height = parent.offsetHeight + 'px';
+
+            document.body.appendChild(btn);
+
+            btn.style.position = 'fixed';
+            btn.style.left = btnRect.left + 'px';
+            btn.style.top = btnRect.top + 'px';
+            btn.style.width = btnRect.width + 'px';
+            btn.style.height = btnRect.height + 'px';
+            btn.style.zIndex = '100';
+            btn.style.margin = '0';
+
+            btn.classList.add('flying-rose');
+            void btn.offsetWidth;
+
+            const destX = giftRect.left + (giftRect.width / 2) - (btnRect.width / 2);
+            const destY = giftRect.top + (giftRect.height / 2) - (btnRect.height / 2);
+
+            btn.style.left = destX + 'px';
+            btn.style.top = destY + 'px';
+            btn.style.transform = 'scale(0.2) rotate(360deg)';
+            btn.style.opacity = '0';
+
+            setTimeout(() => {
+                absorbRoseIntoGift(roseId);
+                btn.remove();
+            }, 1000);
+        }
+
+        function absorbRoseIntoGift(roseId) {
+            collectedRoses.add(roseId);
+            isAnimating = false;
+
+            const progress = collectedRoses.size / totalRoses;
+            const grayValue = 1 - progress;
+            const opacityValue = 0.4 + (progress * 0.6);
+
+            giftBox.style.filter = `grayscale(${grayValue}) opacity(${opacityValue})`;
+
+            giftBox.animate([
+                { transform: 'scale(1.2)' },
+                { transform: 'scale(0.9)' }
+            ], { duration: 400 });
+
+            if (collectedRoses.size >= totalRoses) {
+                unlockGift();
+            }
+        }
+
+        function unlockGift() {
+            giftBox.classList.add('floating-gift');
+            giftBox.style.filter = "grayscale(0%) opacity(1)";
+
+            collectBtn.disabled = false;
+            collectBtn.innerText = "ВІДКРИТИ!";
+        }
+
+        // --- Gift open logic ---
+        function triggerOpenGift() {
+            if (collectBtn.disabled) return;
+
+            collectBtn.classList.add('bounce-trigger');
+
+            const rect = collectBtn.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+            fireBurst(centerX, centerY);
+
+            setTimeout(() => {
+                openGift();
+            }, 300);
+        }
+
+        function openGift() {
+            collectBtn.style.opacity = '0';
+            collectBtn.style.pointerEvents = 'none';
+
+            giftBox.classList.remove('floating-gift');
+            giftBox.classList.add('shutter-animation');
+
+            setTimeout(() => {
+                const giftEmoji = document.getElementById('gift-emoji');
+                const giftImage = document.getElementById('gift-image');
+
+                giftEmoji.style.opacity = '0';
+                giftEmoji.style.transform = 'scale(0)';
+
+                giftImage.classList.remove('scale-0', 'opacity-0');
+                giftImage.classList.add('scale-150', 'opacity-100');
+
+                fireConfetti();
+            }, 600);
+        }
+
+        // --- Confetti Logic ---
+        const canvas = document.getElementById('confetti-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        let particles = [];
+        const colors = ['#f43f5e', '#fb7185', '#fda4af', '#e11d48', '#fff'];
+
+        function fireBurst(x, y) {
+            for (let i = 0; i < 30; i++) {
+                particles.push({
+                    x: x, y: y,
+                    w: Math.random() * 8 + 4, h: Math.random() * 8 + 4,
+                    vx: (Math.random() - 0.5) * 15,
+                    vy: (Math.random() - 1) * 15,
+                    grav: 0.5,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 10
+                });
+            }
+            if (!requestAnimationFrameId) requestAnimationFrame(updateConfetti);
+        }
+
+        function fireConfetti() {
+            for (let i = 0; i < 150; i++) {
+                particles.push({
+                    x: window.innerWidth / 2, y: window.innerHeight / 2,
+                    w: Math.random() * 10 + 5, h: Math.random() * 10 + 5,
+                    vx: (Math.random() - 0.5) * 20,
+                    vy: (Math.random() - 0.5) * 20 - 5,
+                    grav: 0.2,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 10
+                });
+            }
+            if (!requestAnimationFrameId) requestAnimationFrame(updateConfetti);
+        }
+
+        let requestAnimationFrameId;
+
+        function updateConfetti() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles = particles.filter(p => p.y < canvas.height + 50);
+
+            particles.forEach((p) => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += p.grav;
+                p.rotation += p.rotationSpeed;
+                p.vx *= 0.96;
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate(p.rotation * Math.PI / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+                ctx.restore();
+            });
+
+            if (particles.length > 0) {
+                requestAnimationFrameId = requestAnimationFrame(updateConfetti);
+            } else {
+                requestAnimationFrameId = null;
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+    </script>
+</body>
+</html>
