@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Пазл до Дня Валентина</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Switched to 'Marck Script' for beautiful Cyrillic cursive support -->
+    <link href="https://fonts.googleapis.com/css2?family=Marck+Script&family=Nunito:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background: radial-gradient(circle at center, #fff0f3 0%, #fda4af 100%);
+            overflow: hidden;
+            touch-action: none; /* Critical for mobile game control */
+            overscroll-behavior: none; /* Prevent pull-to-refresh effects */
+            -webkit-user-select: none; /* Safari select disable */
+            user-select: none;
+        }
+
+        .title-font {
+            font-family: 'Marck Script', cursive;
+        }
+
+        /* The Game Board Area */
+        #game-area {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* The Silhouette Target */
+        #silhouette {
+            background-repeat: no-repeat;
+            background-size: 100% 100%;
+            opacity: 0.6; 
+            position: absolute;
+            z-index: 10;
+            filter: grayscale(100%) drop-shadow(0 0 2px #e11d48) drop-shadow(0 0 6px #e11d48);
+            animation: pulse-contour 2s infinite alternate;
+        }
+
+        @keyframes pulse-contour {
+            0% {
+                filter: grayscale(100%) drop-shadow(0 0 2px #e11d48) drop-shadow(0 0 4px #e11d48);
+                transform: scale(1);
+            }
+            100% {
+                filter: grayscale(100%) drop-shadow(0 0 3px #ff0055) drop-shadow(0 0 10px #ff0055);
+                transform: scale(1.01);
+            }
+        }
+
+        /* Individual Puzzle Pieces */
+        .puzzle-piece {
+            background-repeat: no-repeat;
+            position: absolute;
+            cursor: grab;
+            z-index: 20;
+            transition: transform 0.1s, opacity 0.1s;
+            touch-action: none;
+            filter: drop-shadow(0 2px 3px rgba(0,0,0,0.1));
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .puzzle-piece:active, .puzzle-piece.dragging {
+            cursor: grabbing;
+            transform: scale(1.1); /* Slightly larger on mobile to see under finger */
+            opacity: 0.9;
+            z-index: 50;
+            filter: drop-shadow(0 10px 20px rgba(0,0,0,0.2));
+        }
+
+        .puzzle-piece.snapped {
+            z-index: 11 !important; /* Force snapped pieces to be just above silhouette */
+            cursor: default;
+            transition: all 0.3s ease-out;
+            pointer-events: none;
+            filter: none;
+            opacity: 1;
+            transform: scale(1) !important;
+        }
+
+        /* Particle Effects */
+        .particle {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background: #fb7185;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 60;
+            animation: pop 0.8s ease-out forwards;
+        }
+
+        @keyframes pop {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+        }
+
+        /* Modal / Overlay */
+        #victory-modal {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(8px);
+            transition: opacity 0.5s ease;
+            z-index: 2000; /* Ensure this is always on top */
+        }
+        
+        .rose-glow {
+            animation: pulse-glow 2s infinite;
+        }
+
+        @keyframes pulse-glow {
+            0% { filter: drop-shadow(0 0 5px rgba(225, 29, 72, 0.3)); }
+            50% { filter: drop-shadow(0 0 20px rgba(225, 29, 72, 0.6)); }
+            100% { filter: drop-shadow(0 0 5px rgba(225, 29, 72, 0.3)); }
+        }
+
+        /* Floating Hearts Background */
+        .bg-heart {
+            position: absolute;
+            color: rgba(255, 255, 255, 0.6);
+            animation: floatUp 10s linear infinite;
+            z-index: 1;
+            text-shadow: 0 2px 4px rgba(255, 100, 100, 0.2);
+        }
+
+        @keyframes floatUp {
+            0% { transform: translateY(100vh) scale(0.5); opacity: 0; }
+            10% { opacity: 0.6; }
+            100% { transform: translateY(-10vh) scale(1.2); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Background Hearts -->
+    <div id="bg-hearts-container"></div>
+
+    <!-- Game Area -->
+    <div id="game-area">
+        <!-- The Target Silhouette -->
+        <div id="silhouette"></div>
+        <!-- Pieces will be injected here via JS -->
+    </div>
+
+    <!-- Victory Modal -->
+    <div id="victory-modal" class="fixed inset-0 flex items-center justify-center z-50 hidden opacity-0">
+        <div class="bg-white/95 p-6 md:p-8 rounded-[2rem] shadow-2xl text-center max-w-sm mx-4 border border-rose-100 transform scale-95 transition-transform duration-500" id="modal-content">
+            <!-- Updated text to feminine gender -->
+            <h2 class="text-4xl md:text-5xl text-rose-600 title-font mb-2">Ти виграла троянду!</h2>
+            <div class="my-6 flex justify-center">
+                <!-- Emoji Size Responsive -->
+                <span class="text-7xl md:text-9xl rose-glow cursor-default select-none">🌹</span>
+            </div>
+            <!-- Removed the text under the rose as requested -->
+            <div class="mb-6"></div> 
+            
+            <button onclick="if(window.parent!==window){window.parent.postMessage('gameComplete','*')}else{resetGame()}" class="bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-bold py-3 px-10 rounded-full shadow-lg transform transition hover:scale-105 active:scale-95 outline-none focus:ring-4 focus:ring-rose-300">
+                Продовжити ❤️
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const ROWS = 3;
+        const COLS = 3;
+        // Dimension variables (calculated dynamically)
+        let totalWidth = 300;
+        let totalHeight = 300;
+        let pieceWidth = 100;
+        let pieceHeight = 100;
+        
+        // Increased threshold slightly for touch devices
+        const SNAP_THRESHOLD = 50; 
+        const IMAGE_URL = 'https://www.freeiconspng.com/uploads/roses-png-hd-wedding-9.png';
+
+        const gameArea = document.getElementById('game-area');
+        const silhouette = document.getElementById('silhouette');
+        const modal = document.getElementById('victory-modal');
+        const modalContent = document.getElementById('modal-content');
+        
+        let pieces = [];
+        let completedCount = 0;
+        let zIndexCounter = 100;
+
+        // Load image first to get dimensions
+        const imgObj = new Image();
+        imgObj.src = IMAGE_URL;
+        imgObj.onload = function() {
+            calculateDimensions();
+            initGame();
+        };
+
+        function calculateDimensions() {
+            // Mobile Optimization:
+            // Use more width on portrait phones (90%)
+            // Use reasonable height to avoid covering browser bars (70%)
+            const isPortrait = window.innerHeight > window.innerWidth;
+            const maxW = window.innerWidth * (isPortrait ? 0.90 : 0.80);
+            const maxH = window.innerHeight * 0.70;
+            
+            const aspect = imgObj.width / imgObj.height;
+
+            if (maxW / maxH > aspect) {
+                // Height is the limiting factor
+                totalHeight = maxH;
+                totalWidth = maxH * aspect;
+            } else {
+                // Width is the limiting factor
+                totalWidth = maxW;
+                totalHeight = maxW / aspect;
+            }
+
+            pieceWidth = totalWidth / COLS;
+            pieceHeight = totalHeight / ROWS;
+
+            // Apply calculated dimensions to silhouette
+            silhouette.style.width = `${totalWidth}px`;
+            silhouette.style.height = `${totalHeight}px`;
+            silhouette.style.backgroundImage = `url('${IMAGE_URL}')`;
+        }
+
+        function initGame() {
+            // Clear existing pieces
+            const existingPieces = document.querySelectorAll('.puzzle-piece');
+            existingPieces.forEach(p => p.remove());
+            
+            pieces = [];
+            completedCount = 0;
+            zIndexCounter = 100;
+            
+            // Generate Grid
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    createPiece(r, c);
+                }
+            }
+
+            scatterPieces();
+        }
+
+        function createPiece(row, col) {
+            const piece = document.createElement('div');
+            piece.classList.add('puzzle-piece');
+            
+            // Set size
+            piece.style.width = `${pieceWidth}px`;
+            piece.style.height = `${pieceHeight}px`;
+
+            // Set background
+            piece.style.backgroundImage = `url('${IMAGE_URL}')`;
+            piece.style.backgroundSize = `${totalWidth}px ${totalHeight}px`;
+            
+            const bgX = -(col * pieceWidth);
+            const bgY = -(row * pieceHeight);
+            piece.style.backgroundPosition = `${bgX}px ${bgY}px`;
+            
+            piece.dataset.row = row;
+            piece.dataset.col = col;
+            piece.dataset.isSnapped = "false";
+            
+            addDragLogic(piece);
+            
+            gameArea.appendChild(piece);
+            pieces.push(piece);
+        }
+
+        function scatterPieces() {
+            const areaRect = gameArea.getBoundingClientRect();
+            const cx = areaRect.width / 2;
+            const cy = areaRect.height / 2;
+            
+            pieces.forEach(piece => {
+                // Random position in a ring around the center
+                const angle = Math.random() * Math.PI * 2;
+                
+                // Optimized scatter for mobile:
+                // Ensure pieces aren't too far out, but also not on top of the rose
+                const minRadius = Math.max(totalWidth, totalHeight) / 1.8; 
+                
+                // Max limits
+                const screenLimitX = (areaRect.width / 2) - pieceWidth;
+                const screenLimitY = (areaRect.height / 2) - pieceHeight;
+                const maxRadius = Math.min(screenLimitX, screenLimitY);
+
+                // If screen is tiny, just use available space safely
+                const safeMaxRadius = Math.max(minRadius + 10, maxRadius);
+                
+                const radius = minRadius + Math.random() * Math.max(0, safeMaxRadius - minRadius);
+                
+                let x = cx + Math.cos(angle) * radius - (pieceWidth / 2);
+                let y = cy + Math.sin(angle) * radius - (pieceHeight / 2);
+
+                // Clamp to screen bounds with padding (safe area)
+                const padding = 15;
+                x = Math.max(padding, Math.min(x, areaRect.width - pieceWidth - padding));
+                y = Math.max(padding, Math.min(y, areaRect.height - pieceHeight - padding));
+
+                piece.style.left = `${x}px`;
+                piece.style.top = `${y}px`;
+            });
+        }
+
+        // Drag Logic
+        function addDragLogic(el) {
+            let isDragging = false;
+            let startX, startY, initialLeft, initialTop;
+
+            const startDrag = (e) => {
+                if (el.dataset.isSnapped === "true") return;
+                
+                isDragging = true;
+                el.classList.add('dragging');
+                zIndexCounter++;
+                el.style.zIndex = zIndexCounter;
+                el.style.transition = 'none';
+
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                startX = clientX;
+                startY = clientY;
+
+                const rect = el.getBoundingClientRect();
+                const areaRect = gameArea.getBoundingClientRect();
+                initialLeft = rect.left - areaRect.left;
+                initialTop = rect.top - areaRect.top;
+
+                // Stop scrolling on mobile
+                if(e.cancelable) e.preventDefault();
+            };
+
+            const doDrag = (e) => {
+                if (!isDragging) return;
+
+                const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
+                const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
+
+                const dx = clientX - startX;
+                const dy = clientY - startY;
+
+                el.style.left = `${initialLeft + dx}px`;
+                el.style.top = `${initialTop + dy}px`;
+                
+                // Prevent scrolling during drag
+                if(e.cancelable) e.preventDefault();
+            };
+
+            const endDrag = (e) => {
+                if (!isDragging) return;
+                isDragging = false;
+                el.classList.remove('dragging');
+                el.style.transition = 'transform 0.1s, opacity 0.1s';
+                checkSnap(el);
+            };
+
+            el.addEventListener('mousedown', startDrag);
+            el.addEventListener('touchstart', startDrag, {passive: false});
+
+            // Attach to document to handle dragging outside element bounds
+            document.addEventListener('mousemove', doDrag);
+            document.addEventListener('touchmove', doDrag, {passive: false});
+
+            document.addEventListener('mouseup', endDrag);
+            document.addEventListener('touchend', endDrag);
+        }
+
+        function checkSnap(piece) {
+            const row = parseInt(piece.dataset.row);
+            const col = parseInt(piece.dataset.col);
+
+            const silRect = silhouette.getBoundingClientRect();
+            const areaRect = gameArea.getBoundingClientRect();
+
+            // Target position relative to game area
+            const targetLeft = (silRect.left - areaRect.left) + (col * pieceWidth);
+            const targetTop = (silRect.top - areaRect.top) + (row * pieceHeight);
+
+            const currentLeft = parseFloat(piece.style.left);
+            const currentTop = parseFloat(piece.style.top);
+
+            const dist = Math.hypot(currentLeft - targetLeft, currentTop - targetTop);
+
+            if (dist < SNAP_THRESHOLD) {
+                snapPiece(piece, targetLeft, targetTop);
+            }
+        }
+
+        function snapPiece(piece, x, y) {
+            // Remove the high z-index used during dragging so it settles back to layer 11 (defined in CSS)
+            piece.style.zIndex = ''; 
+
+            piece.style.transition = 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'; 
+            piece.style.left = `${x}px`;
+            piece.style.top = `${y}px`;
+            
+            piece.dataset.isSnapped = "true";
+            piece.classList.add('snapped');
+            
+            spawnParticles(x + pieceWidth/2, y + pieceHeight/2);
+
+            completedCount++;
+            
+            if (completedCount === ROWS * COLS) {
+                setTimeout(showVictory, 600);
+            }
+        }
+
+        function spawnParticles(x, y) {
+            // Reduced particle count slightly for mobile performance
+            const count = 12;
+            for(let i=0; i<count; i++) {
+                const p = document.createElement('div');
+                p.classList.add('particle');
+                
+                const angle = Math.random() * Math.PI * 2;
+                const dist = 30 + Math.random() * 40;
+                
+                const tx = Math.cos(angle) * dist;
+                const ty = Math.sin(angle) * dist;
+
+                p.style.setProperty('--tx', `${tx}px`);
+                p.style.setProperty('--ty', `${ty}px`);
+                
+                p.style.left = `${x}px`;
+                p.style.top = `${y}px`;
+                
+                const colors = ['#fb7185', '#f43f5e', '#ffffff', '#fda4af'];
+                p.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+                
+                const size = 3 + Math.random() * 4;
+                p.style.width = `${size}px`;
+                p.style.height = `${size}px`;
+
+                gameArea.appendChild(p);
+
+                setTimeout(() => p.remove(), 800);
+            }
+        }
+
+        function showVictory() {
+            modal.classList.remove('hidden');
+            requestAnimationFrame(() => {
+                modal.classList.remove('opacity-0');
+                modalContent.classList.remove('scale-95');
+                modalContent.classList.add('scale-100');
+            });
+            
+            silhouette.style.transition = 'opacity 1s, filter 1s, transform 1s';
+            silhouette.style.opacity = '1';
+            silhouette.style.filter = 'none'; 
+            silhouette.style.animation = 'none'; 
+        }
+
+        function resetGame() {
+            modal.classList.add('opacity-0');
+            modalContent.classList.remove('scale-100');
+            modalContent.classList.add('scale-95');
+            
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                
+                silhouette.style.opacity = '0.6';
+                silhouette.style.filter = 'grayscale(100%) drop-shadow(0 0 2px #e11d48) drop-shadow(0 0 6px #e11d48)';
+                silhouette.style.animation = 'pulse-contour 2s infinite alternate';
+                
+                initGame();
+            }, 500);
+        }
+
+        function createBackgroundHearts() {
+            const container = document.getElementById('bg-hearts-container');
+            const heartSymbols = ['❤', '♥', '💕', '💖', '✨'];
+            
+            for(let i=0; i<20; i++) {
+                const heart = document.createElement('div');
+                heart.classList.add('bg-heart');
+                heart.innerText = heartSymbols[Math.floor(Math.random() * heartSymbols.length)];
+                heart.style.left = Math.random() * 100 + 'vw';
+                heart.style.fontSize = (Math.random() * 24 + 12) + 'px';
+                heart.style.animationDuration = (Math.random() * 8 + 12) + 's'; 
+                heart.style.animationDelay = (Math.random() * 15) + 's';
+                container.appendChild(heart);
+            }
+        }
+
+        createBackgroundHearts();
+        
+        // Handle orientation changes gracefully
+        window.addEventListener('resize', () => {
+             // Debounce slightly
+             clearTimeout(window.resizeTimer);
+             window.resizeTimer = setTimeout(() => {
+                 calculateDimensions();
+                 initGame();
+             }, 100);
+        });
+    </script>
+</body>
+</html>

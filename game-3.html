@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ловець Сердець</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Added subset=cyrillic to ensure Ukrainian characters render in the correct font style -->
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&family=Quicksand:wght@500;700&subset=cyrillic&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Quicksand', sans-serif;
+            overflow: hidden;
+            touch-action: none; /* Prevent scroll on mobile */
+            user-select: none;
+            background: linear-gradient(180deg, #fff0f3 0%, #ffdde1 100%);
+        }
+
+        .valentine-font {
+            font-family: 'Pacifico', cursive;
+        }
+
+        /* Glassmorphism for UI elements */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 8px 32px 0 rgba(255, 105, 135, 0.2);
+        }
+
+        /* Rose Animation */
+        @keyframes float {
+            0% { transform: translateY(0px) scale(1); }
+            50% { transform: translateY(-10px) scale(1.05); }
+            100% { transform: translateY(0px) scale(1); }
+        }
+        
+        @keyframes glow {
+            0% { text-shadow: 0 0 10px rgba(255, 0, 50, 0.2); }
+            50% { text-shadow: 0 0 20px rgba(255, 0, 50, 0.6); }
+            100% { text-shadow: 0 0 10px rgba(255, 0, 50, 0.2); }
+        }
+
+        .rose-anim {
+            animation: float 3s ease-in-out infinite, glow 2s ease-in-out infinite;
+        }
+
+        /* Button Press Effect */
+        .btn-press:active {
+            transform: scale(0.95);
+        }
+
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+
+        /* Update: Score is now behind gameplay but visible */
+        #score-container {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 0;
+            pointer-events: none;
+            width: 100%;
+            text-align: center;
+        }
+
+        #scoreDisplay {
+            font-size: 25vh; /* Massive responsive font */
+            line-height: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass through to canvas mostly */
+        }
+
+        .pointer-events-auto {
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex items-center justify-center overflow-hidden">
+
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- New Score Position (Background) -->
+    <div id="score-container">
+        <div id="scoreDisplay" class="valentine-font text-pink-400 opacity-20 transition-transform duration-150">
+            0/10
+        </div>
+    </div>
+
+    <!-- UI Overlay -->
+    <div id="ui-layer" class="flex flex-col justify-between p-6">
+        
+        <!-- Removed old top score counter -->
+        <div></div> 
+
+        <!-- Start Screen REMOVED -->
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="hidden absolute inset-0 flex items-center justify-center bg-black/10 backdrop-blur-md pointer-events-auto">
+            <div class="glass-panel p-8 rounded-3xl text-center max-w-sm mx-4 border-red-200">
+                <div class="text-6xl mb-4">💔</div>
+                <h2 class="valentine-font text-4xl text-gray-700 mb-2">О ні!</h2>
+                <p class="text-gray-500 mb-6">Ти спіймала розбите серце.</p>
+                <button onclick="startGame()" class="btn-press bg-gray-700 hover:bg-gray-800 text-white font-bold py-3 px-8 rounded-full shadow-lg text-lg transition-colors">
+                    Спробувати ще
+                </button>
+            </div>
+        </div>
+
+        <!-- Win Screen -->
+        <div id="winScreen" class="hidden absolute inset-0 flex items-center justify-center bg-rose-100/40 backdrop-blur-md pointer-events-auto">
+            <div class="glass-panel p-10 rounded-3xl text-center max-w-sm mx-4 border-rose-300 relative overflow-hidden">
+                <!-- Confetti Canvas sits inside here implicitly via JS or global -->
+                
+                <h2 class="valentine-font text-3xl text-rose-600 mb-4">Вітаємо!</h2>
+                <p class="text-gray-600 font-bold text-lg mb-6">Ти виграла ТРОЯНДУ</p>
+                
+                <div class="text-8xl mb-8 rose-anim cursor-pointer select-none">🌹</div>
+                
+                <button onclick="if(window.parent!==window){window.parent.postMessage('gameComplete','*')}else{startGame()}" class="btn-press bg-gradient-to-r from-rose-400 to-pink-500 hover:from-rose-500 hover:to-pink-600 text-white font-bold py-3 px-10 rounded-full shadow-lg text-xl transition-all">
+                    Продовжити
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Game Configuration & State
+         */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Screens
+        // Removed startScreen variable
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const winScreen = document.getElementById('winScreen');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+
+        // Game State
+        let gameActive = false;
+        let score = 0;
+        const targetScore = 10;
+        let lastTime = 0;
+        let spawnTimer = 0;
+        let gameStartTime = 0; // New: Track when game started
+        let particleSystem = [];
+
+        // Assets
+        const GOOD_HEARTS = ['❤️', '💖', '💗', '💓', '💝', '💘'];
+        const BAD_HEART = '💔';
+        const PLAYER_EMOJI = '😍';
+        
+        // Physics
+        let player = {
+            x: 0,
+            y: 0,
+            width: 60,
+            height: 60,
+            targetX: 0
+        };
+
+        let entities = []; // Falling items
+
+        /**
+         * Initialization & Resizing
+         */
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            player.y = canvas.height - 100;
+            player.x = canvas.width / 2;
+            player.targetX = canvas.width / 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        /**
+         * Input Handling (Mouse & Touch)
+         */
+        function handleInput(x) {
+            if (!gameActive) return;
+            player.targetX = x;
+            
+            // Clamp to screen
+            if (player.targetX < player.width/2) player.targetX = player.width/2;
+            if (player.targetX > canvas.width - player.width/2) player.targetX = canvas.width - player.width/2;
+        }
+
+        window.addEventListener('mousemove', (e) => handleInput(e.clientX));
+        window.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Stop scrolling
+            handleInput(e.touches[0].clientX);
+        }, { passive: false });
+
+        /**
+         * Game Logic
+         */
+        function startGame() {
+            // Reset State
+            score = 0;
+            entities = [];
+            particleSystem = [];
+            gameActive = true;
+            scoreDisplay.textContent = `0/${targetScore}`;
+            
+            // Reset Player
+            player.x = canvas.width / 2;
+            player.targetX = canvas.width / 2;
+
+            // UI Updates
+            // Removed startScreen logic
+            gameOverScreen.classList.add('hidden');
+            winScreen.classList.add('hidden');
+            
+            // Start Loop
+            lastTime = performance.now();
+            gameStartTime = lastTime; // Set start time
+            requestAnimationFrame(gameLoop);
+        }
+
+        function spawnEntity(difficultyMultiplier) {
+            const size = 40 + Math.random() * 20; // Random size
+            const x = Math.random() * (canvas.width - size) + size/2;
+            
+            // 20% chance of broken heart
+            const isBad = Math.random() < 0.25; 
+            const emoji = isBad ? BAD_HEART : GOOD_HEARTS[Math.floor(Math.random() * GOOD_HEARTS.length)];
+            
+            // Base speed multiplied by difficulty
+            const baseSpeed = (3 + Math.random() * 3) * (canvas.height / 800);
+            
+            entities.push({
+                x: x,
+                y: -50,
+                size: size,
+                emoji: emoji,
+                type: isBad ? 'bad' : 'good',
+                speed: baseSpeed * difficultyMultiplier, // Apply speed up
+                rotation: Math.random() * 0.5 - 0.25,
+                rotSpeed: Math.random() * 0.02 - 0.01
+            });
+        }
+
+        function createExplosion(x, y, color) {
+            for(let i=0; i<15; i++) {
+                particleSystem.push({
+                    x: x,
+                    y: y,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    life: 1.0,
+                    color: color,
+                    emoji: null // Use circles
+                });
+            }
+        }
+
+        function createWinConfetti() {
+            // Create a burst of confetti from the center
+            for(let i=0; i<100; i++) {
+                particleSystem.push({
+                    x: canvas.width / 2,
+                    y: canvas.height / 2,
+                    vx: (Math.random() - 0.5) * 20,
+                    vy: (Math.random() - 0.5) * 20,
+                    life: 2.0 + Math.random(),
+                    color: `hsl(${Math.random() * 60 + 320}, 100%, 70%)`, // Pinks and reds
+                    gravity: 0.1,
+                    emoji: Math.random() > 0.5 ? '🌸' : null
+                });
+            }
+        }
+
+        function gameOver() {
+            gameActive = false;
+            gameOverScreen.classList.remove('hidden');
+        }
+
+        function gameWin() {
+            gameActive = false;
+            createWinConfetti();
+            winScreen.classList.remove('hidden');
+            
+            // Keep animating background/particles but stop game logic
+            requestAnimationFrame(uiLoop);
+        }
+
+        /**
+         * Main Game Loop
+         */
+        function gameLoop(timestamp) {
+            if (!gameActive) return;
+
+            const dt = timestamp - lastTime;
+            lastTime = timestamp;
+
+            // Calculate Difficulty based on time
+            // Every 5 seconds (5000ms), speed increases by ~15%
+            const timeAlive = timestamp - gameStartTime;
+            const difficultyMultiplier = 1 + (timeAlive / 5000) * 0.15;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Update Player (Lerp for smoothness)
+            player.x += (player.targetX - player.x) * 0.2;
+
+            // 2. Spawn Manager
+            spawnTimer += dt;
+            
+            // Spawn rate decreases (becomes faster) as difficulty increases
+            // Base rate 800ms, divided by difficulty
+            const spawnRate = 800 / difficultyMultiplier; 
+
+            if (spawnTimer > spawnRate) {
+                spawnEntity(difficultyMultiplier);
+                spawnTimer = 0;
+            }
+
+            // 3. Update Entities
+            for (let i = entities.length - 1; i >= 0; i--) {
+                let e = entities[i];
+                e.y += e.speed;
+                e.rotation += e.rotSpeed;
+
+                // Collision Detection (Circle approximation)
+                const dx = player.x - e.x;
+                const dy = player.y - e.y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                // Catch threshold
+                if (distance < (player.width/2 + e.size/2 - 10)) {
+                    // Collision!
+                    if (e.type === 'bad') {
+                        gameOver();
+                        return; // Stop frame
+                    } else {
+                        // Good catch
+                        score++;
+                        scoreDisplay.textContent = `${score}/${targetScore}`;
+                        
+                        // Subtle pop effect on the big counter
+                        scoreDisplay.style.transform = "scale(1.1)";
+                        setTimeout(() => scoreDisplay.style.transform = "scale(1)", 100);
+                        
+                        createExplosion(e.x, e.y, '#ff4d6d');
+                        entities.splice(i, 1);
+
+                        if (score >= targetScore) {
+                            gameWin();
+                            return;
+                        }
+                        continue;
+                    }
+                }
+
+                // Remove if off screen
+                if (e.y > canvas.height + 50) {
+                    entities.splice(i, 1);
+                }
+            }
+
+            // 4. Update Particles
+            updateParticles();
+
+            // 5. Draw Everything
+            drawGame();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        /**
+         * UI Animation Loop (Runs when game is paused/won)
+         */
+        function uiLoop() {
+            if (gameActive) return; // Handled by gameLoop
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            updateParticles();
+            drawGame(true); // Draw faded background game state
+            requestAnimationFrame(uiLoop);
+        }
+
+        function updateParticles() {
+            for (let i = particleSystem.length - 1; i >= 0; i--) {
+                let p = particleSystem[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.02;
+
+                if (p.gravity) p.vy += p.gravity;
+                p.vx *= 0.95; // Friction
+                p.vy *= 0.95;
+
+                if (p.life <= 0) particleSystem.splice(i, 1);
+            }
+        }
+
+        function drawGame(isBackground = false) {
+            if (isBackground) ctx.globalAlpha = 0.3;
+
+            // Draw Player
+            ctx.font = `${player.width}px serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(PLAYER_EMOJI, player.x, player.y);
+
+            // Draw Entities
+            for (let e of entities) {
+                ctx.save();
+                ctx.translate(e.x, e.y);
+                ctx.rotate(e.rotation);
+                ctx.font = `${e.size}px serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(e.emoji, 0, 0);
+                ctx.restore();
+            }
+
+            if (isBackground) ctx.globalAlpha = 1.0;
+
+            // Draw Particles (Always fully visible)
+            for (let p of particleSystem) {
+                ctx.globalAlpha = p.life;
+                if (p.emoji) {
+                    ctx.font = "20px serif";
+                    ctx.fillText(p.emoji, p.x, p.y);
+                } else {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // Start game immediately on load
+        startGame();
+
+    </script>
+</body>
+</html>
